@@ -2,6 +2,7 @@ const express = require("express");
 const ethers = require("ethers");
 const router = express.Router();
 const Collection = require("../models/collection");
+const Request = require("../models/request");
 const Moralis = require("moralis").default;
 
 router.post("/collection", async (req, res) => {
@@ -79,19 +80,118 @@ router.get("/collection/:id", async (req, res) => {
     }
 
     let collection = await Collection.findById(id);
-    let nfts = {};
 
-    // for (let i = 0; i < collection.contracts.length; i++) {
-    //   const response = await Moralis.EvmApi.nft.getContractNFTs({
-    //     address: collection.contracts[i].address,
-    //     chain: collection.contracts[i].chainId,
-    //   });
-    //   nfts[collection.contracts[i].chainId] = response.result;
-    // }
-
-    res.send({ collection, nfts });
+    res.send({ collection });
   } catch (err) {
     res.status(500).send(err);
+  }
+});
+
+router.post("/request", async (req, res) => {
+  try {
+    if (req.body.id) {
+      const updatedrequest = await Request.findByIdAndUpdate(
+        req.body.id,
+        req.body
+      );
+      if (updatedrequest) {
+        res.json(updatedrequest);
+        return;
+      } else {
+        res.status(404).json({ error: "Collection not found" });
+        return;
+      }
+    } else {
+      const request = new Request(req.body);
+      await request.save();
+      res.send(request);
+      return;
+    }
+  } catch (err) {
+    res.status(400).send(err);
+    return;
+  }
+});
+
+router.get("/requests", async (req, res) => {
+  try {
+    const requests = await Request.find();
+    res.send(requests);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+router.get("/request/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!id) {
+      res.status(400).send({ error: "Invalid Id" });
+      return;
+    }
+
+    let request = await Request.findById(id);
+
+    res.send({ request });
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+router.post("/delete-request", async (req, res) => {
+  let auth = req.header("Authorization");
+  if (!verifyAdmin("Delete Request " + req.body._id, auth)) {
+    res.status(401).send("Unauthorized Wallet");
+    return;
+  }
+
+  try {
+    if (req.body._id) {
+      const deletedrequest = await Request.findByIdAndDelete(req.body._id);
+      if (deletedrequest) {
+        res.json(deletedrequest);
+        return;
+      } else {
+        res.status(404).json({ error: "Request not found" });
+        return;
+      }
+    }
+  } catch (err) {
+    res.status(400).send(err);
+    return;
+  }
+});
+
+router.post("/approve-request", async (req, res) => {
+  let auth = req.header("Authorization");
+  if (!verifyAdmin("Approve Request " + req.body._id, auth)) {
+    res.status(401).send("Unauthorized Wallet");
+    return;
+  }
+
+  try {
+    if (req.body._id) {
+      const approverequest = await Request.findByIdAndUpdate(
+        req.body._id,
+        req.body
+      );
+      if (approverequest) {
+        const collection = new Collection(req.body);
+        await collection.save();
+        res.send(collection);
+        return;
+      } else {
+        res.status(404).json({ error: "Collection not found" });
+        return;
+      }
+    } else {
+      res.status(404).send("Request not found!");
+      return;
+    }
+  } catch (err) {
+    res.status(400).send(err);
+    return;
   }
 });
 
@@ -108,6 +208,11 @@ router.get(
 
       const walletAddress = req.params.walletAddress;
       const chainId = req.params.chainId;
+
+      if (!(chainId == "0x5" || chainId == "0x13381" || chainId == "0x61")) {
+        res.status(200).send([]);
+        return;
+      }
 
       let addresses = [];
       collections.forEach((c_) => {
