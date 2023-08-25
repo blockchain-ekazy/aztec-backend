@@ -5,6 +5,7 @@ const collectionSchema = new mongoose.Schema({
   title: String,
   description: String,
   contracts: [contractSchema],
+  version: Number,
 });
 
 const Collection = mongoose.model("Collection", collectionSchema);
