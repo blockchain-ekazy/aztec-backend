@@ -3,6 +3,7 @@ const ethers = require("ethers");
 const router = express.Router();
 const Collection = require("../models/collection");
 const Request = require("../models/request");
+const { default: axios } = require("axios");
 const Moralis = require("moralis").default;
 
 router.post("/collection", async (req, res) => {
@@ -202,60 +203,94 @@ router.get(
     try {
       const collections = await Collection.find();
       if (collections.length == 0) {
-        res.status(200).send([]);
-        return;
+        return res.status(200).send([]);
       }
 
       const walletAddress = req.params.walletAddress;
       const chainId = req.params.chainId;
 
-      if (!(chainId == "0x5" || chainId == "0x13381" || chainId == "0x61")) {
-        res.status(200).send([]);
-        return;
-      }
-
       let addresses = [];
       collections.forEach((c_) => {
         c_.contracts.forEach((c__) => {
-          if (c__.chainId == chainId) addresses.push(c__.address);
+          if (c__.chainId == chainId) {
+            let obj = {};
+            obj[c__.address] = [];
+            addresses.push(obj);
+          }
         });
       });
 
       if (addresses.length == 0) {
-        res.status(200).send([]);
-        return;
+        return res.status(200).send([]);
       }
 
-      let response = await Moralis.EvmApi.nft
-        .getWalletNFTs({
-          chain: chainId,
-          format: "decimal",
-          normalizeMetadata: false,
-          tokenAddresses: addresses,
-          mediaItems: false,
-          address: walletAddress,
+      const options = {
+        method: "POST",
+        url: `https://rpc.ankr.com/multichain/${process.env.ANKR_API}/?ankr_getNFTsByOwner=`,
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        data: {
+          jsonrpc: "2.0",
+          method: "ankr_getNFTsByOwner",
+          params: {
+            blockchain: [Ankr_Chain_IdToName[chainId]],
+            filter: addresses,
+            walletAddress: walletAddress,
+          },
+          id: 1,
+        },
+      };
+
+      await axios
+        .request(options)
+        .then(async function (response) {
+          if (!response.data.result) {
+            return res.status(200).send([]);
+          }
+
+          response.data.result.assets.forEach((r_) => {
+            collections.forEach((c_) => {
+              if (
+                c_.contracts.find((c__) => {
+                  return (
+                    c__.address.toLowerCase() ==
+                    r_.contractAddress.toLowerCase()
+                  );
+                })
+              )
+                r_.addresses = c_.contracts;
+            });
+          });
+
+          let filteredTokens = [];
+          for (let i = 0; i < response.data.result.assets.length; i++) {
+            let r_ = response.data.result.assets[i];
+            let provider = new ethers.providers.JsonRpcProvider(
+              `https://rpc.ankr.com/${Ankr_Chain_IdToName[chainId]}`
+            );
+
+            const ct = new ethers.Contract(
+              r_.contractAddress,
+              ownerOf_ABI,
+              provider
+            );
+
+            try {
+              let o_ = await ct.ownerOf(r_.tokenId);
+              if (o_.toLowerCase() == walletAddress.toLowerCase()) {
+                filteredTokens.push(response.data.result.assets[i]);
+              }
+            } catch (e) {}
+          }
+
+          return res.status(200).send(filteredTokens);
         })
-        .catch((e) => console.log("Morallis error", e));
-
-      if (response.raw.result.length == 0) {
-        res.status(200).send([]);
-        return;
-      }
-
-      response.raw.result.forEach((r_) => {
-        collections.forEach((c_) => {
-          if (
-            c_.contracts.find((c__) => {
-              return (
-                c__.address.toLowerCase() == r_.token_address.toLowerCase()
-              );
-            })
-          )
-            r_.addresses = c_.contracts;
+        .catch(function (error) {
+          console.error(error);
+          return res.status(400).send(error);
         });
-      });
-
-      res.send(response.raw.result);
     } catch (err) {
       console.log(err);
       res.status(500).send(err);
@@ -264,6 +299,19 @@ router.get(
 );
 
 router.post("/adminlogin", async (req, res) => {
+  const { reCAPTCHA_TOKEN, Secret_Key } = req.body;
+  try {
+    let response = await axios.post(
+      `https://www.google.com/recaptcha/api/siteverify?secret=${Secret_Key}&response=${reCAPTCHA_TOKEN}`
+    );
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Error verifying token",
+    });
+  }
+
   try {
     const message = req.body.message;
     const signature = req.body.signature;
@@ -287,3 +335,99 @@ function verifyAdmin(m, s) {
     String(ethers.utils.verifyMessage(m, s)).toLowerCase()
   );
 }
+
+const Ankr_Chain_IdToName = {
+  "0x5": "eth_goerli",
+  "0xa86a": "avalanche",
+  "0xa869": "avalanche_fuji",
+  "0x38": "bsc",
+  "0x1": "eth",
+  "0xfa": "fantom",
+  "0x89": "polygon",
+  "0x13881": "polygon_mumbai",
+};
+
+const ownerOf_ABI = [
+  {
+    inputs: [
+      {
+        internalType: "uint256",
+        name: "tokenId",
+        type: "uint256",
+      },
+    ],
+    name: "ownerOf",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+];
+
+// MORALIS
+// http://localhost:3001/api/get-tokens/account/0x86fc9DbcE9e909c7AB4D5D94F07e70742E2d144A/chain/80001
+// router.get(
+//   "/get-tokens/account/:walletAddress/chain/:chainId",
+//   async (req, res) => {
+//     try {
+//       const collections = await Collection.find();
+//       if (collections.length == 0) {
+//         res.status(200).send([]);
+//         return;
+//       }
+
+//       const walletAddress = req.params.walletAddress;
+//       const chainId = req.params.chainId;
+
+//       if (!(chainId == "0x5" || chainId == "0x13381" || chainId == "0x61")) {
+//         res.status(200).send([]);
+//         return;
+//       }
+
+//       let addresses = [];
+//       collections.forEach((c_) => {
+//         c_.contracts.forEach((c__) => {
+//           if (c__.chainId == chainId) addresses.push(c__.address);
+//         });
+//       });
+
+//       if (addresses.length == 0) {
+//         res.status(200).send([]);
+//         return;
+//       }
+
+//       let response = await Moralis.EvmApi.nft
+//         .getWalletNFTs({
+//           chain: chainId,
+//           format: "decimal",
+//           normalizeMetadata: false,
+//           tokenAddresses: addresses,
+//           mediaItems: false,
+//           address: walletAddress,
+//         })
+//         .catch((e) => console.log("Morallis error", e));
+
+//       if (response.raw.result.length == 0) {
+//         res.status(200).send([]);
+//         return;
+//       }
+
+//       response.raw.result.forEach((r_) => {
+//         collections.forEach((c_) => {
+//           if (
+//             c_.contracts.find((c__) => {
+//               return (
+//                 c__.address.toLowerCase() == r_.token_address.toLowerCase()
+//               );
+//             })
+//           )
+//             r_.addresses = c_.contracts;
+//         });
+//       });
+
+//       res.send(response.raw.result);
+//     } catch (err) {
+//       console.log(err);
+//       res.status(500).send(err);
+//     }
+//   }
+// );
