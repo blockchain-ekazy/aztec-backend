@@ -303,18 +303,18 @@ router.post("/approve-request", async (req, res) => {
 // );
 
 router.post("/adminlogin", async (req, res) => {
-  const { reCAPTCHA_TOKEN, Secret_Key } = req.body;
-  try {
-    let response = await axios.post(
-      `https://www.google.com/recaptcha/api/siteverify?secret=${Secret_Key}&response=${reCAPTCHA_TOKEN}`
-    );
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: "Error verifying token",
-    });
-  }
+  // const { reCAPTCHA_TOKEN, Secret_Key } = req.body;
+  // try {
+  //   let response = await axios.post(
+  //     `https://www.google.com/recaptcha/api/siteverify?secret=${Secret_Key}&response=${reCAPTCHA_TOKEN}`
+  //   );
+  // } catch (error) {
+  //   console.log(error);
+  //   return res.status(500).json({
+  //     success: false,
+  //     message: "Error verifying token",
+  //   });
+  // }
 
   try {
     const message = req.body.message;
