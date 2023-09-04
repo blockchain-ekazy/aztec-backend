@@ -473,6 +473,7 @@ router.get(
                 })
               )
                 r_.addresses = c_.contracts;
+              r_.version = c_.version;
             });
           });
 
@@ -540,6 +541,7 @@ router.get(
                   })
                 ) {
                   n_.addresses = c_.contracts;
+                  n_.version = c_.version;
                 }
               });
             });
