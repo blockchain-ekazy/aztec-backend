@@ -529,6 +529,19 @@ router.get(
               n_["name"] = n_.external_data.name;
               n_["contractAddress"] = i_.contract_address;
               n_["tokenId"] = n_.token_id;
+
+              collections.forEach((c_) => {
+                if (
+                  c_.contracts.find((c__) => {
+                    return (
+                      c__.address.toLowerCase() ==
+                      i_.contract_address.toLowerCase()
+                    );
+                  })
+                ) {
+                  n_.addresses = c_.contracts;
+                }
+              });
             });
 
             nfts = nfts.concat(i_.nft_data);
