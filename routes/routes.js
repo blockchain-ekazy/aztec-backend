@@ -303,18 +303,18 @@ router.post("/approve-request", async (req, res) => {
 // );
 
 router.post("/adminlogin", async (req, res) => {
-  // const { reCAPTCHA_TOKEN, Secret_Key } = req.body;
-  // try {
-  //   let response = await axios.post(
-  //     `https://www.google.com/recaptcha/api/siteverify?secret=${Secret_Key}&response=${reCAPTCHA_TOKEN}`
-  //   );
-  // } catch (error) {
-  //   console.log(error);
-  //   return res.status(500).json({
-  //     success: false,
-  //     message: "Error verifying token",
-  //   });
-  // }
+  const { reCAPTCHA_TOKEN, Secret_Key } = req.body;
+  try {
+    let response = await axios.post(
+      `https://www.google.com/recaptcha/api/siteverify?secret=${Secret_Key}&response=${reCAPTCHA_TOKEN}`
+    );
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Error verifying token",
+    });
+  }
 
   try {
     const message = req.body.message;
@@ -385,19 +385,19 @@ router.get(
       const walletAddress = req.params.walletAddress;
       const chainId = req.params.chainId;
 
-      if (chainId == "0x5" || chainId == "0x13881" || chainId == "0x61") {
-        let addresses = [];
-        collections.forEach((c_) => {
-          c_.contracts.forEach((c__) => {
-            if (c__.chainId == chainId) addresses.push(c__.address);
-          });
+      let addresses = [];
+      collections.forEach((c_) => {
+        c_.contracts.forEach((c__) => {
+          if (c__.chainId == chainId) addresses.push(c__.address);
         });
+      });
 
-        if (addresses.length == 0) {
-          res.status(200).send([]);
-          return;
-        }
+      if (addresses.length == 0) {
+        res.status(200).send([]);
+        return;
+      }
 
+      if (chainId == "0x5" || chainId == "0x13881" || chainId == "0x61") {
         let response = await Moralis.EvmApi.nft
           .getWalletNFTs({
             chain: chainId,
@@ -437,21 +437,6 @@ router.get(
 
         res.send(response.raw.result);
       } else if (chainId == "0xa869") {
-        let addresses = [];
-        collections.forEach((c_) => {
-          c_.contracts.forEach((c__) => {
-            if (c__.chainId == chainId) {
-              let obj = {};
-              obj[c__.address] = [];
-              addresses.push(obj);
-            }
-          });
-        });
-
-        if (addresses.length == 0) {
-          return res.status(200).send([]);
-        }
-
         const options = {
           method: "POST",
           url: `https://rpc.ankr.com/multichain/${process.env.ANKR_API}/?ankr_getNFTsByOwner=`,
@@ -516,6 +501,41 @@ router.get(
 
           return res.status(200).send(filteredTokens);
         });
+      } else if (chainId == "0x507") {
+        const response = await axios.get(
+          `https://api.covalenthq.com/v1/moonbeam-moonbase-alpha/address/${walletAddress}/balances_nft/?with-uncached=true`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            auth: {
+              username: "cqt_rQjVRwTJc737H8xtXYmG4mQywXJw",
+            },
+          }
+        );
+
+        let items = response.data.data.items;
+        let nfts = [];
+        items.forEach((i_) => {
+          if (
+            addresses
+              .map((a_) => a_.toLowerCase())
+              .includes(i_.contract_address.toLowerCase())
+          ) {
+            let items_ = i_.nft_data;
+
+            items_.forEach((n_) => {
+              n_["imageUrl"] = n_.external_data.image;
+              n_["name"] = n_.external_data.name;
+              n_["contractAddress"] = i_.contract_address;
+              n_["tokenId"] = n_.token_id;
+            });
+
+            nfts = nfts.concat(i_.nft_data);
+          }
+        });
+
+        res.send(nfts);
       }
     } catch (err) {
       console.log(err);
