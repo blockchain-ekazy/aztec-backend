@@ -429,8 +429,12 @@ router.get(
           });
 
           let m = JSON.parse(r_.metadata);
-          r_["imageUrl"] = m.image;
-          r_["name"] = m.name;
+
+          r_["imageUrl"] =
+            m && m.image
+              ? m.image
+              : "https://testnets.opensea.io/static/images/placeholder.png";
+          r_["name"] = m && m.name ? m.name : "#" + r_.token_id;
           r_["contractAddress"] = r_.token_address;
           r_["tokenId"] = r_.token_id;
         });
@@ -554,6 +558,53 @@ router.get(
       }
     } catch (err) {
       console.log(err);
+      res.status(500).send(err);
+    }
+  }
+);
+
+router.get(
+  "/signtraverse/:tokenAddress/:srcChain/:dstChain",
+  async (req, res) => {
+    try {
+      const tokenAddress = req.params.tokenAddress;
+      const srcChain = req.params.srcChain;
+      const dstChain = req.params.dstChain;
+
+      if (!(tokenAddress && srcChain && dstChain)) {
+        res.status(400).send({ error: "Invalid api call" });
+        return;
+      }
+
+      let collection = await Collection.find({
+        "contracts.address": tokenAddress.toLowerCase(),
+      });
+
+      if (!collection.length) {
+        res.status(400).send({ error: "Collection not found" });
+        return;
+      }
+
+      const dstAddress = collection[0].contracts.filter((c_) => {
+        return c_.chainId == dstChain ? c_.address : "";
+      })[0].address;
+
+      const provider = new ethers.providers.JsonRpcProvider(
+        "https://eth-goerli.g.alchemy.com/v2/9rYRCT3uOuRu6TI-LMXNj1v57YWNZqBD"
+      );
+      const signer = new ethers.Wallet(process.env.ADMIN_KEY, provider);
+      let message1 = ethers.utils.solidityPack(
+        ["address", "address"],
+        [tokenAddress, dstAddress]
+      );
+      message1 = ethers.utils.solidityKeccak256(["bytes"], [message1]);
+
+      const signature1 = await signer.signMessage(
+        ethers.utils.arrayify(message1)
+      );
+
+      res.send({ signature1, tokenAddress, dstAddress });
+    } catch (err) {
       res.status(500).send(err);
     }
   }
