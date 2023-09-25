@@ -13,6 +13,7 @@ const requestSchema = new mongoose.Schema({
   description: String,
   approved: Boolean,
   contracts: [contractSchema],
+  version: Number,
 });
 
 const Request = mongoose.model("Request", requestSchema);
